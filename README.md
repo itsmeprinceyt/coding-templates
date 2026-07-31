@@ -1,0 +1,1 @@
+To be honest as I'm making new projects there are some things which I have to do over and over again so Im going to make coding templates which I can directly use and then focus on building what I wanted instead of building everything from scratch. I know i could have made npm packages or stuff like that but uhhh I'm going to go with this for now.
