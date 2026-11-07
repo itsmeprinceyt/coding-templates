@@ -2,10 +2,9 @@
 import fs from "fs";
 import path from "path";
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { setupIndexes } from "./createIndexs";
-import MIGRATIONS_TABLE_SQL from "./Queries/migration.queries";
-import { getProduction } from "../../utils/Variables/getProduction";
-import { getCurrentDateTime } from "../../utils/getDateTime.util";
+import { setupIndexes } from "./create.index.db";
+import MIGRATIONS_TABLE_SQL from "./migration.table.db";
+import { getProduction } from "../../utils/ValueFetcher/getProduction.util";
 
 /**
  * Splits a MySQL script into individual statements, honoring `DELIMITER`
@@ -146,13 +145,15 @@ async function runSqlFile(conn: PoolConnection, sql: string) {
  *   6. Read and sort all `.sql` migration files
  *   7. Skip migrations that have already been applied
  *   8. Read and execute each pending migration file
- *   9. Record each successfully applied migration with its timestamp
+ *   9. Record each successfully applied migration (timestamp auto-set by DB)
  *   10. Log migration processing status
  *   11. Determine the current production environment
  *   12. Setup database indexes based on the environment
  *   13. Release the database connection
  */
 export async function runMigrations(pool: Pool) {
+  console.log("[MIGRATION - CHECKING] Scanning for pending migrations");
+
   const migrationsDir = path.join(
     process.cwd(),
     "src",
@@ -163,7 +164,7 @@ export async function runMigrations(pool: Pool) {
 
   if (!fs.existsSync(migrationsDir)) {
     console.warn(
-      `[MIGRATION] Directory not found : ${migrationsDir} — creating it`,
+      `[MIGRATION - CREATE] ➤ Directory not found : ${migrationsDir} — creating it`,
     );
     fs.mkdirSync(migrationsDir, { recursive: true });
   }
@@ -181,21 +182,33 @@ export async function runMigrations(pool: Pool) {
       .filter((f) => f.toLowerCase().endsWith(".sql"))
       .sort();
 
+    let appliedCount = 0;
+    let skippedCount = 0;
+
     for (const file of files) {
-      if (applied.has(file)) continue;
+      if (applied.has(file)) {
+        skippedCount++;
+        console.log(`[MIGRATION - SKIP] ➤ ${file} already applied`);
+        continue;
+      }
 
       const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
-      console.log(`[MIGRATION] Applying : ${file}...`);
+      console.log(`[MIGRATION - APPLY] >_ Applying ${file}`);
       await runSqlFile(conn, sql);
-      const now = getCurrentDateTime();
-      await conn.query(
-        "INSERT INTO migrations (filename, applied_at) VALUES (?, ?)",
-        [file, now],
-      );
-      console.log(`[MIGRATION] Applied : ${file}`);
+      await conn.query("INSERT INTO migrations (filename) VALUES (?)", [file]);
+      appliedCount++;
+      console.log(`[MIGRATION - APPLIED] >_ ${file}`);
     }
 
-    console.log(`[MIGRATION] ✅ All migrations processed.`);
+    if (appliedCount === 0 && skippedCount > 0) {
+      console.log("[MIGRATION - SKIP] ➤ All migrations already applied");
+    } else if (appliedCount === 0 && skippedCount === 0) {
+      console.log("[MIGRATION - SKIP] ➤ No migration files found");
+    } else {
+      console.log(
+        `[MIGRATION - READY] >_ Migrations processed (applied: ${appliedCount}, skipped: ${skippedCount})`,
+      );
+    }
 
     const isProduction: boolean = getProduction();
     await setupIndexes(pool, isProduction);

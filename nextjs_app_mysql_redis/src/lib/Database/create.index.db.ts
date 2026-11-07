@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Pool } from "mysql2/promise";
 import { createIndexStatements, dropIndexStatements } from "./Index/Indexing";
-import { getProduction } from "../../utils/Variables/getProduction";
+import { getProduction } from "../../utils/ValueFetcher/getProduction.util";
 
 const manualSkipIndexing: boolean = true;
 
